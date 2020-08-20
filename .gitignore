@@ -1,2 +1,5 @@
 # workspace configuration files
 .vscode
+
+# python .gitignore
+__pycache__/

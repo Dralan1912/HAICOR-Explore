@@ -1,0 +1,7 @@
+name: haicor-explore
+channels:
+  - defaults
+dependencies:
+  - pylint
+  - autopep8
+  - python
