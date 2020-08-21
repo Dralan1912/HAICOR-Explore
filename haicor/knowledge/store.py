@@ -13,6 +13,7 @@ import json
 import re
 import sqlite3 as sqlite
 from itertools import chain
+from typing import Any, Generator, List, Optional, Tuple
 
 from .types import Assertion, Concept
 
@@ -118,3 +119,40 @@ class ConceptNetStore(sqlite.Connection):
                 raise RuntimeWarning(f"{uri} changed into {assertion}")
 
         self.commit()
+
+    def get_concepts(self, text: Optional[str] = None,
+                     speech: Optional[str] = None,
+                     suffix: Optional[str] = None) -> Generator[Concept]:
+        """Get all concepts that matches the query"""
+
+        statement, parameters = self.concept_clause(text, speech, suffix)
+
+        return (Concept(*i[1:]) for i in self.execute(statement, parameters))
+
+    def get_concepts_id(self, text: Optional[str] = None,
+                        speech: Optional[str] = None,
+                        suffix: Optional[str] = None) -> Generator[int]:
+        """Get all concepts' id that matches the query"""
+
+        statement, parameters = self.concept_clause(text, speech, suffix)
+
+        return (i[0] for i in self.execute(statement, parameters))
+
+    @staticmethod
+    def where_clause(**kwargs) -> Tuple[str, Tuple[Any, ...]]:
+        clauses = {f"{k} {'IN' if isinstance(v, (list, tuple)) else '=='} ?": v
+                   for k, v in kwargs.items() if v}
+
+        return " AND ".join(clauses.keys()), tuple(clauses.values())
+
+    @staticmethod
+    def concept_clause(text: Optional[str] = None,
+                       speech: Optional[str] = None,
+                       suffix: Optional[str] = None) -> Tuple[str, Tuple[str, ...]]:
+        statement, parameters = ConceptNetStore.where_clause(text=text,
+                                                             speech=speech,
+                                                             suffix=suffix)
+        statement = ("SELECT id, text, speech, suffix FROM concepts"
+                     + (f" WHERE {statement}" if statement else ""))
+
+        return statement, parameters
