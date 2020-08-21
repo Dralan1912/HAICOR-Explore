@@ -15,6 +15,6 @@ if __name__ == "__main__":
     with sqlite.connect("data/englishnet-assertions-5.7.0.sqlite",
                         factory=ConceptNetStore) as database:
         database: ConceptNetStore = database
-
-        for concept in database.get_concepts():
-            print(concept)
+        database.create(reset=True)
+        database.populate("data/conceptnet-assertions-5.7.0.csv.gz",
+                          "data/relations.csv")

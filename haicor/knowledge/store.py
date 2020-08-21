@@ -76,7 +76,7 @@ class ConceptNetStore(sqlite.Connection):
                           if source[:6] == target[:6] == "/c/en/"}
 
         with open(relations, "r") as file:
-            relations = {f"/r/{relation}": directed == "directed"
+            relations = {relation: directed == "directed"
                          for relation, directed in csv.reader(file)}
 
         concept_mapping = {}
@@ -106,7 +106,7 @@ class ConceptNetStore(sqlite.Connection):
         for id, (uri, fields) in enumerate(assertions.items(), start=1):
             relation, source, target, info = fields
 
-            (type_id, _), type = relation_mapping[relation], relation[3:]
+            (type_id, _), type = relation_mapping[relation[3:]], relation[3:]
             source_id, source = concept_mapping[source]
             target_id, target = concept_mapping[target]
             weight = json.loads(info)["weight"]
