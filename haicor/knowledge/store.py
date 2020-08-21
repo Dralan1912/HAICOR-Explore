@@ -13,7 +13,7 @@ import json
 import re
 import sqlite3 as sqlite
 from itertools import chain
-from typing import Any, Generator, Iterable, List, Optional, Tuple
+from typing import Any, Generator, Iterable, Optional, Tuple
 
 from .types import Assertion, Concept
 
@@ -120,6 +120,17 @@ class ConceptNetStore(sqlite.Connection):
 
         self.commit()
 
+    def is_directed(self, type: str) -> bool:
+        """Check if the given relation type is directed"""
+
+        result = self.execute("SELECT * FROM relations WHERE type == ?",
+                              (type,)).fetchone()
+
+        if result is None:
+            raise RuntimeError(f"unknown relation type {type}")
+
+        return result[2] == 1
+
     def get_concepts(self, text: Optional[str] = None,
                      speech: Optional[str] = None,
                      suffix: Optional[str] = None) -> Generator[Concept]:
@@ -197,7 +208,7 @@ class ConceptNetStore(sqlite.Connection):
     @staticmethod
     def concept_clause(text: Optional[str] = None,
                        speech: Optional[str] = None,
-                       suffix: Optional[str] = None) -> Tuple[str, Tuple[str, ...]]:
+                       suffix: Optional[str] = None) -> Tuple[str, tuple]:
         statement, parameters = ConceptNetStore.where_clause(text=text,
                                                              speech=speech,
                                                              suffix=suffix)
@@ -209,7 +220,7 @@ class ConceptNetStore(sqlite.Connection):
     @staticmethod
     def assertion_clause(type: Optional[str] = None,
                          source: Optional[Iterable[int]] = None,
-                         target: Optional[Iterable[int]] = None) -> Tuple[str, Tuple[Any, ...]]:
+                         target: Optional[Iterable[int]] = None) -> Tuple[str, tuple]:
         source, target = source and tuple(source), target and tuple(target)
         statement, parameters = ConceptNetStore.where_clause(relation=type,
                                                              source_id=source,
