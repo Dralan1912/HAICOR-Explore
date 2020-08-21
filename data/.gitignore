@@ -1,2 +1,5 @@
 # large downloadable files
 conceptnet-assertions-5.7.0.csv.gz
+
+# large generated files
+database.sqlite

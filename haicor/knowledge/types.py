@@ -34,8 +34,9 @@ class Assertion:
     type: str
     source: Concept
     target: Concept
+    weight: float
 
     def __str__(self) -> str:
         """ConceptNet assertion URI representation"""
 
-        return (f"/a/[{self.type}/,{self.source}/,{self.target}/]")
+        return (f"/a/[/r/{self.type}/,{self.source}/,{self.target}/]")
