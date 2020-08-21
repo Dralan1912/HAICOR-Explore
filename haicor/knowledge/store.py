@@ -13,7 +13,7 @@ import json
 import re
 import sqlite3 as sqlite
 from itertools import chain
-from typing import Any, Generator, List, Optional, Tuple
+from typing import Any, Generator, Iterable, List, Optional, Tuple
 
 from .types import Assertion, Concept
 
@@ -138,12 +138,61 @@ class ConceptNetStore(sqlite.Connection):
 
         return (i[0] for i in self.execute(statement, parameters))
 
-    @staticmethod
-    def where_clause(**kwargs) -> Tuple[str, Tuple[Any, ...]]:
-        clauses = {f"{k} {'IN' if isinstance(v, (list, tuple)) else '=='} ?": v
-                   for k, v in kwargs.items() if v}
+    def get_assertions(self, type: Optional[str] = None,
+                       source: Optional[Concept] = None,
+                       target: Optional[Concept] = None) -> Generator[Assertion]:
+        """Get all assertions that matches the query"""
 
-        return " AND ".join(clauses.keys()), tuple(clauses.values())
+        source = source and self.get_concepts_id(text=source.text,
+                                                 speech=source.speech,
+                                                 suffix=source.suffix)
+        target = target and self.get_concepts_id(text=target.text,
+                                                 speech=target.speech,
+                                                 suffix=target.suffix)
+        statement, parameters = self.assertion_clause(type, source, target)
+
+        return (Assertion(i[1], Concept(*i[4:7]), Concept(*i[8:11]), i[2])
+                for i in self.execute(statement, parameters))
+
+    def get_assertions_id(self, type: Optional[str] = None,
+                          source: Optional[Concept] = None,
+                          target: Optional[Concept] = None) -> Generator[int]:
+        """Get all assertions' id that matches the query"""
+
+        source = source and self.get_concepts_id(text=source.text,
+                                                 speech=source.speech,
+                                                 suffix=source.suffix)
+        target = target and self.get_concepts_id(text=target.text,
+                                                 speech=target.speech,
+                                                 suffix=target.suffix)
+        statement, parameters = self.assertion_clause(type, source, target)
+
+        return (i[0] for i in self.execute(statement, parameters))
+
+    @staticmethod
+    def in_clause(field: str, value: tuple) -> str:
+        return f"{field} IN {value}"
+
+    @staticmethod
+    def equal_clause(field: str, value: Any) -> Tuple[str, Any]:
+        return f"{field} == ?", value
+
+    @staticmethod
+    def where_clause(**kwargs) -> Tuple[str, tuple]:
+        clauses, parameters = [], []
+        for field, value in kwargs.items():
+            if value is None:
+                continue
+
+            if isinstance(value, tuple):
+                clauses.append(ConceptNetStore.in_clause(field, value))
+            else:
+                clause, parameter = ConceptNetStore.equal_clause(field, value)
+
+                clauses.append(clause)
+                parameters.append(parameter)
+
+        return " AND ".join(clauses), tuple(parameters)
 
     @staticmethod
     def concept_clause(text: Optional[str] = None,
@@ -153,6 +202,25 @@ class ConceptNetStore(sqlite.Connection):
                                                              speech=speech,
                                                              suffix=suffix)
         statement = ("SELECT id, text, speech, suffix FROM concepts"
+                     + (f" WHERE {statement}" if statement else ""))
+
+        return statement, parameters
+
+    @staticmethod
+    def assertion_clause(type: Optional[str] = None,
+                         source: Optional[Iterable[int]] = None,
+                         target: Optional[Iterable[int]] = None) -> Tuple[str, Tuple[Any, ...]]:
+        source, target = source and tuple(source), target and tuple(target)
+        statement, parameters = ConceptNetStore.where_clause(relation=type,
+                                                             source_id=source,
+                                                             target_id=target)
+        statement = ("SELECT assertions.id, relations.type AS relation, weight,"
+                     + " cs.id AS source_id, cs.text, cs.speech, cs.suffix,"
+                     + " ct.id AS target_id, ct.text, ct.speech, ct.suffix"
+                     + " FROM assertions"
+                     + " JOIN concepts AS cs ON cs.id == assertions.source"
+                     + " JOIN concepts AS ct ON ct.id == assertions.target"
+                     + " JOIN relations ON relations.id == assertions.type"
                      + (f" WHERE {statement}" if statement else ""))
 
         return statement, parameters
