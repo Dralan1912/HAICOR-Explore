@@ -10,16 +10,13 @@ from __future__ import annotations
 import csv
 import gzip
 import json
-import logging
 import re
 import sqlite3 as sqlite
 from itertools import chain
-from logging import Logger
-from typing import Optional, Union
 
 from .types import Assertion, Concept
 
-CONCEPT = re.compile(r"^/c/en/([^/]+)(?:/(\w))?(?:/(.+))?/?$")
+CONCEPT_URI = re.compile(r"^/c/en/([^/]+)(?:/(\w))?(?:/(.+?))?/?$")
 
 CREATE_SQL = """
 CREATE TABLE concepts (
@@ -57,87 +54,67 @@ class ConceptNetStore(sqlite.Connection):
     def __init__(self, *args, **kwargs):
         super(ConceptNetStore, self).__init__(*args, **kwargs)
 
-        self.logger: Logger = logging.getLogger()
-
     def create(self, reset: bool = False):
         """Create the necessary tables"""
 
         if reset:  # delete concepts and assertions tables if exist
-            self.logger.info("Dropping old tables")
             self.execute("DROP TABLE IF EXISTS concepts;")
             self.execute("DROP TABLE IF EXISTS relations;")
             self.execute("DROP TABLE IF EXISTS assertions;")
-            self.logger.info("Dropped old tables")
 
-        self.logger.info("Creating necessary tables")
         self.executescript(CREATE_SQL)
-        self.logger.info("Created necessary tables")
         self.commit()
 
-    def populate(self, assertions: str, relations: str, processes: Optional[int] = None):
+    def populate(self, assertions: str, relations: str, verify: bool = True):
         """Populate the database with supplied ConceptNet file"""
 
         with gzip.open(assertions, "rt") as file:
-            self.logger.info("Reading English assertions")
             assertions = {uri: (type, source, target, info)
                           for uri, type, source, target, info
                           in csv.reader(file, delimiter="\t")
                           if source[:6] == target[:6] == "/c/en/"}
-            self.logger.info(f"Read {len(assertions)} English assertions")
 
         with open(relations, "r") as file:
-            self.logger.info("Reading ConceptNet relations")
-            relations = {relation: directed == "directed"
+            relations = {f"/r/{relation}": directed == "directed"
                          for relation, directed in csv.reader(file)}
-            self.logger.info(f"Read {len(relations)} ConceptNet relations")
 
-        self.logger.info("Populating concepts")
+        concept_mapping = {}
+        relation_mapping = {}
+
         concepts = chain.from_iterable(i[1:3] for i in assertions.values())
-        concepts_lookup = {}
-
         for id, uri in enumerate(set(concepts), start=1):
-            if not (match := re.match(CONCEPT, uri)):
-                self.logger.error(f"Failed to parse {uri} into Concept")
+            if (match := re.match(CONCEPT_URI, uri)) is None:
+                raise RuntimeError(f"{uri} cannot be parsed into Concept")
 
-            if str(concept := Concept(*match.group(1, 2, 3))) != uri:
-                self.logger.warning(f"{concept} differs from {uri}")
+            concept = Concept(*match.group(1, 2, 3))
+            concept_mapping[uri] = (id, concept)
 
-            self.logger.debug(f"Parsed {uri} into Concept")
-            concepts_lookup[uri] = (id, concept)
-            self.execute(
-                "INSERT INTO concepts (text, speech, suffix) VALUES (?, ?, ?);",
-                (concept.text, concept.speech, concept.suffix)
-            )
+            if verify and str(concept) != uri and str(concept) != uri[:-1]:
+                raise RuntimeWarning(f"{uri} changed into {concept}")
 
-        self.logger.info(f"Populated {len(concepts_lookup)} concepts")
-        self.logger.info("Populating relations")
-        relations_lookup = {}
+        self.executemany("INSERT INTO concepts VALUES (?,?,?,?);",
+                         ((i, c.text, c.speech, c.suffix)
+                          for i, c in concept_mapping.values()))
 
-        for id, (type, directed) in enumerate(relations.items(), start=1):
-            relations_lookup[type] = id
-            self.execute(
-                "INSERT INTO relations (type, direct) VALUES (?, ?);",
-                (type, directed)
-            )
+        for id, (relation, directed) in enumerate(relations.items(), start=1):
+            relation_mapping[relation] = (id, directed)
 
-        self.logger.info(f"Populated {len(relations_lookup)} relations")
-        self.logger.info("Populating assertions")
+        self.executemany("INSERT INTO relations VALUES (?,?,?);",
+                         ((i, r, d) for r, (i, d) in relation_mapping.items()))
 
-        for uri, (type, source, target, info) in assertions.items():
-            type_id, type = relations_lookup[type[3:]], type[3:]
-            source_id, source = concepts_lookup[source]
-            target_id, target = concepts_lookup[target]
+        for id, (uri, fields) in enumerate(assertions.items(), start=1):
+            relation, source, target, info = fields
+
+            (type_id, _), type = relation_mapping[relation], relation[3:]
+            source_id, source = concept_mapping[source]
+            target_id, target = concept_mapping[target]
             weight = json.loads(info)["weight"]
 
-            if str(assertion := Assertion(type, source, target, weight)) != uri:
-                self.logger.warning(f"{assertion} differs from {uri}")
+            assertion = Assertion(type, source, target, weight)
+            self.execute("INSERT INTO assertions VALUES (?,?,?,?,?);",
+                         (id, type_id, source_id, target_id, weight))
 
-            self.logger.debug(f"Parsed {uri} into Assertion")
-            self.execute(
-                ("INSERT INTO assertions (type, source, target, weight) "
-                 "VALUES (?, ?, ?, ?);"),
-                (type_id, source_id, target_id, weight)
-            )
+            if verify and str(assertion) != uri:
+                raise RuntimeWarning(f"{uri} changed into {assertion}")
 
-        self.logger.info(f"Populated {len(assertions)} assertions")
         self.commit()

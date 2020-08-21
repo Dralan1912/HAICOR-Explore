@@ -39,4 +39,4 @@ class Assertion:
     def __str__(self) -> str:
         """ConceptNet assertion URI representation"""
 
-        return (f"/a/[/r/{self.type}/,{self.source}/,{self.target}/]")
+        return f"/a/[/r/{self.type}/,{self.source}/,{self.target}/]"

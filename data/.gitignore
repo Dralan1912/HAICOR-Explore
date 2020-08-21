@@ -2,4 +2,4 @@
 conceptnet-assertions-5.7.0.csv.gz
 
 # large generated files
-database.sqlite
+englishnet-assertions-5.7.0.sqlite
