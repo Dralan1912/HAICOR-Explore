@@ -1,5 +1,9 @@
 # large downloadable files
 conceptnet-assertions-5.7.0.csv.gz
+story-commonsense/
 
 # large generated files
+concepts.txt
+concepts_id.txt
+distances/
 englishnet-assertions-5.7.0.sqlite

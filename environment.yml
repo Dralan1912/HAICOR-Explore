@@ -1,7 +1,11 @@
 name: haicor-explore
 channels:
+  - conda-forge
   - defaults
 dependencies:
   - pylint
-  - autopep8
   - python
+  - autopep8
+  - graph-tool
+  - nltk
+  - tqdm
