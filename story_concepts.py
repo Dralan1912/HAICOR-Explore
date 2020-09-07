@@ -14,7 +14,7 @@ from nltk.tokenize import word_tokenize
 from tqdm import tqdm
 
 from haicor.knowledge.store import ConceptNetStore
-from haicor.processes.extractor import ConceptExtractor
+from haicor.process.extractor import ConceptExtractor
 
 DATABASE = "data/englishnet-assertions-5.7.0.sqlite"
 DATASET = "data/story-commonsense/json_version/annotations.json"
